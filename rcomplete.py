@@ -27,41 +27,41 @@ def make_executable(path):
     os.chmod(path, mode)
 
 
-def generateReflectionFiles(fileName, setSize):
-    try:
-        make_executable(path.join(sys._MEIPASS,'crossflaghkl'))
-    except AttributeError:
-        call(['crossflaghkl', '-t'+str(setSize), '-r.k', fileName], stdout=FNULL)
-    else:
-        call([path.join(sys._MEIPASS,'crossflaghkl'), '-t'+str(setSize), '-r.k', fileName], stdout=FNULL)
+# def generateReflectionFiles(fileName, setSize):
+#     try:
+#         make_executable(path.join(sys._MEIPASS,'crossflaghkl'))
+#     except AttributeError:
+#         call(['crossflaghkl', '-t'+str(setSize), '-r.k', fileName], stdout=FNULL)
+#     else:
+#         call([path.join(sys._MEIPASS,'crossflaghkl'), '-t'+str(setSize), '-r.k', fileName], stdout=FNULL)
 
 
-class Merger(threading.Thread):
-    def __init__(self, insfileName, hklFileName, outFileName, callback):
-        super(Merger, self).__init__()
-        self.ins = insfileName
-        self.hkl = hklFileName
-        self.out = outFileName
-        self.callback = callback
-        updateMergeProgress()
-        self.start()
-
-    def run(self):
-        mergeHKLFile(self.ins, self.hkl, self.out, self.callback)
-
-
-def mergeCallback(msg):
-    global mergeProgress
-    mergeProgress = msg
-    # root.after(10, updateMergeProgress)
+# class Merger(threading.Thread):
+#     def __init__(self, insfileName, hklFileName, outFileName, callback):
+#         super(Merger, self).__init__()
+#         self.ins = insfileName
+#         self.hkl = hklFileName
+#         self.out = outFileName
+#         self.callback = callback
+#         updateMergeProgress()
+#         self.start()
+#
+#     def run(self):
+#         mergeHKLFile(self.ins, self.hkl, self.out, self.callback)
 
 
-def updateMergeProgress():
-    status['text'] = mergeProgress
-    if mergeProgress == 'Data merged successfully.':
-        _load()
-    else:
-        root.after(100, updateMergeProgress)
+# def mergeCallback(msg):
+#     global mergeProgress
+#     mergeProgress = msg
+#     # root.after(10, updateMergeProgress)
+#
+#
+# def updateMergeProgress():
+#     status['text'] = mergeProgress
+#     if mergeProgress == 'Data merged successfully.':
+#         _load()
+#     else:
+#         root.after(100, updateMergeProgress)
 
 
 def load():
@@ -69,14 +69,14 @@ def load():
     if not IDLE:
         return
     IDLE = False
-    global mergeCheck
-    if mergeCheck.get():
-        # mergeHKLFile(insFile.get(),hklFile.get(),'_merged.hkl',)
-        m = Merger(insFile.get(),hklFile.get(),'_merged.hkl', mergeCallback)
-        hklFile.set('_merged.hkl')
-        return
-    else:
-        _load()
+    # global mergeCheck
+    # if mergeCheck.get():
+    #     # mergeHKLFile(insFile.get(),hklFile.get(),'_merged.hkl',)
+    #     # m = Merger(insFile.get(),hklFile.get(),'_merged.hkl', mergeCallback)
+    #     # hklFile.set('_merged.hkl')
+    #     return
+    # else:
+    _load()
 
 
 def _load():
@@ -228,7 +228,7 @@ def run():
     if not status['text'] == 'Input loaded. Ready to run.' and not 'Done' in status['text']:
         status['text'] = 'Error. No input files loaded.'
         return
-    status['text'] = 'Running. Generating HKL files.'
+    # status['text'] = 'Running. Generating HKL files.'
     try:
         make_executable(path.join(sys._MEIPASS,'shelxl'))
     except AttributeError:
@@ -238,8 +238,8 @@ def run():
 
 def _run():
     k = nFree.get()
-    generateReflectionFiles(hklFile.get(), k)
-    status['text'] = 'Working... HKL files generated.'
+    # generateReflectionFiles(hklFile.get(), k)
+    # status['text'] = 'Working... HKL files generated.'
 
     global insContent
     foundList = False
@@ -254,13 +254,13 @@ def _run():
             insContent[i] = ''
 
         if line[:4].upper() == 'LIST' and compileMap.get():
-            insContent[i] = 'LIST 4\n'
+            insContent[i] = 'LIST 9\n'
             foundList = True
 
     if not foundList and compileMap.get():
         for i, line in enumerate(insContent):
             if line[:4].upper() == 'L.S.' or line[:4].upper() == 'CGLS':
-                insContent = insContent[:i+1] + ['List 4\n'] + insContent[i+1:]
+                insContent = insContent[:i+1] + ['List 9\n'] + insContent[i+1:]
                 break
 
     insContent = ''.join(insContent)
@@ -275,9 +275,10 @@ def _run():
     msgQueue.put(0)
     setStatus('test')
     for n in xrange(nFiles):
-        queue.put('.k_set{:0>4}.hkl'.format(str(n)))
+        n += 1
+        queue.put(('.k_set{:0>4}.hkl'.format(str(n)),n))
     for i in xrange(nCPU.get()):
-        t = WorkerThread(i, queue, msgQueue, insContent)
+        t = WorkerThread(i, queue, msgQueue, insContent, hklFile.get(), nHKL.get() / nFree.get())
         threads.append(t)
         t.start()
     i=0
@@ -331,12 +332,14 @@ def finish():
 
 
 class WorkerThread(threading.Thread):
-    def __init__(self, ID, queue, msgQueue, instructionFile):
+    def __init__(self, ID, queue, msgQueue, instructionFile, hklFilePath, numberOfRuns):
         super(WorkerThread, self).__init__()
         self.ID = ID
         self.queue = queue
         self.msgQueue = msgQueue
         self.insFile = instructionFile
+        self.hklFilePath = hklFilePath
+        self.numberOfRuns = numberOfRuns
         self.ds = []
         self.fs = []
 
@@ -351,15 +354,23 @@ class WorkerThread(threading.Thread):
             self.process(data)
 
     def process(self, data):
+        data, m = data
         name = path.splitext(data)[0]
         insName = name + '.ins'
+        hklName = name + '.hkl'
         # shutil.copyfile(insFile.get(), insName)
+        try:
+            os.symlink(self.hklFilePath, hklName)
+        except:
+            import win32file
+            win32file.CreateSymbolicLink(self.hklFilePath, hklName, 1)
         with open(insName, 'w') as rp:
             rp.write(self.insFile)
         try:
-            call([path.join(sys._MEIPASS,'shelxl'), '-t1', name], stdout=FNULL)
+            call([path.join(sys._MEIPASS,'shelxl'), '-t1', '-g{}'.format(self.numberOfRuns), '-m{}'.format(m), name],
+                 stdout=FNULL)
         except AttributeError:
-            call(['shelxl', '-t1', name], stdout=FNULL)
+            call(['shelxl', '-t1', '-g{}'.format(self.numberOfRuns), '-m{}'.format(m), name], stdout=FNULL)
         # call(['shelxl', '-t1', name])
         with open(name+'.lst', 'r') as lstFile:
             for line in lstFile.readlines():
@@ -449,8 +460,8 @@ def gui():
     Entry(root, textvariable=hklFile).grid(row=line, column=1)
     Button(root, text='Browse', command=browseHKL).grid(row=line, column=2)
 
-    line += 1
-    Checkbutton(root, var=mergeCheck, text='Merge Reflections').grid(row=line, column=1, sticky=W)
+    # line += 1
+    # Checkbutton(root, var=mergeCheck, text='Merge Reflections').grid(row=line, column=1, sticky=W)
     line += 1
     Button(root, text='Load', command=load).grid(row=line, columnspan=3)
     line += 1
