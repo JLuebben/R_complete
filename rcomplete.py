@@ -243,6 +243,7 @@ def _run():
 
     global insContent
     foundList = False
+    foundMerge = False
     for i, line in enumerate(insContent):
         if line[:4].upper() == 'L.S.' or line[:4].upper() == 'CGLS':
             insContent[i] = '{} {} -1\n'.format('L.S.' if lsType.get() == 2 else 'CGLS',
@@ -257,10 +258,20 @@ def _run():
             insContent[i] = 'LIST 9\n'
             foundList = True
 
+        if line[:4].upper() == 'MERG':
+            insContent[i] = 'MERG 4\n'
+            foundMerge = True
+
     if not foundList and compileMap.get():
         for i, line in enumerate(insContent):
             if line[:4].upper() == 'L.S.' or line[:4].upper() == 'CGLS':
                 insContent = insContent[:i+1] + ['List 9\n'] + insContent[i+1:]
+                break
+
+    if not foundMerge:
+        for i, line in enumerate(insContent):
+            if line[:4].upper() == 'L.S.' or line[:4].upper() == 'CGLS':
+                insContent = insContent[:i+1] + ['MERG 4\n'] + insContent[i+1:]
                 break
 
     insContent = ''.join(insContent)
