@@ -21,12 +21,12 @@ def makeMap(fileNameBase, dir='./', output='Rcomplete.fcf'):
                     if not line:
                         # read = False
                         break
-                    triple = tuple([int(i) for i in line.split()[:3]])
-                    if triple in flaggedIndices:
-                        data.append(line)
+                    # triple = tuple([int(i) for i in line.split()[:3]])
+                    # if triple in flaggedIndices:
+                    data.append(line)
                 elif first:
                     data.append(line[:-1])
-                if '_refln_phase_calc' in line:
+                if '_shelx_refinement_sigma' in line:
                     read = True
         first = False
     with open(output, 'w') as outFile:
