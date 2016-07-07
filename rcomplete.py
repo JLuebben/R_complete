@@ -373,8 +373,10 @@ class WorkerThread(threading.Thread):
         try:
             os.symlink(self.hklFilePath, hklName)
         except:
-            import win32file
-            win32file.CreateSymbolicLink(self.hklFilePath, hklName, 1)
+            #import win32file
+            #win32file.CreateSymbolicLink(self.hklFilePath, hklName, 1)
+            import shutil
+            shutil.copy(self.hklFilePath, hklName)
         with open(insName, 'w') as rp:
             rp.write(self.insFile)
         try:
