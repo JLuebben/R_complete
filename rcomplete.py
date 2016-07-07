@@ -231,7 +231,7 @@ def run():
     # status['text'] = 'Running. Generating HKL files.'
     try:
         make_executable(path.join(sys._MEIPASS,'shelxl'))
-    except AttributeError:
+    except:
         pass
     root.after(10, _run)
 
@@ -380,7 +380,7 @@ class WorkerThread(threading.Thread):
         try:
             call([path.join(sys._MEIPASS,'shelxl'), '-t1', '-g{}'.format(self.numberOfRuns), '-m{}'.format(m), name],
                  stdout=FNULL)
-        except AttributeError:
+        except:
             call(['shelxl', '-t1', '-g{}'.format(self.numberOfRuns), '-m{}'.format(m), name], stdout=FNULL)
         # call(['shelxl', '-t1', name])
         with open(name+'.lst', 'r') as lstFile:
