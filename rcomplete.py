@@ -195,7 +195,7 @@ def run():
     # status['text'] = 'Running. Generating HKL files.'
     try:
         make_executable(path.join(sys._MEIPASS,'shelxl'))
-    except AttributeError:
+    except:
         pass
     root.after(10, _run)
 
@@ -346,14 +346,16 @@ class WorkerThread(threading.Thread):
         try:
             os.symlink(self.hklFilePath, hklName)
         except:
-            import win32file
-            win32file.CreateSymbolicLink(self.hklFilePath, hklName, 1)
+            #import win32file
+            #win32file.CreateSymbolicLink(self.hklFilePath, hklName, 1)
+            import shutil
+            shutil.copy(self.hklFilePath, hklName)
         with open(insName, 'w') as rp:
             rp.write(self.insFile)
         try:
             call([path.join(sys._MEIPASS,'shelxl'), '-t1', '-g{}'.format(self.numberOfRuns), '-m{}'.format(m), name],
                  stdout=FNULL)
-        except AttributeError:
+        except:
             call(['shelxl', '-t1', '-g{}'.format(self.numberOfRuns), '-m{}'.format(m), name], stdout=FNULL)
         with open(name+'.lst', 'r') as lstFile:
             for line in lstFile.readlines():
