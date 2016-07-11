@@ -1,11 +1,13 @@
 import multiprocessing
 
-from subprocess import PIPE, Popen, call
+from subprocess import call
 import threading
-import Queue
+try:
+    import Queue
+except ImportError:
+    import queue as Queue
 import sys
-from os import path, chmod, listdir, environ
-from merge import mergeHKLFile
+from os import path
 import os
 
 IDLE = False
@@ -27,55 +29,11 @@ def make_executable(path):
     os.chmod(path, mode)
 
 
-# def generateReflectionFiles(fileName, setSize):
-#     try:
-#         make_executable(path.join(sys._MEIPASS,'crossflaghkl'))
-#     except AttributeError:
-#         call(['crossflaghkl', '-t'+str(setSize), '-r.k', fileName], stdout=FNULL)
-#     else:
-#         call([path.join(sys._MEIPASS,'crossflaghkl'), '-t'+str(setSize), '-r.k', fileName], stdout=FNULL)
-
-
-# class Merger(threading.Thread):
-#     def __init__(self, insfileName, hklFileName, outFileName, callback):
-#         super(Merger, self).__init__()
-#         self.ins = insfileName
-#         self.hkl = hklFileName
-#         self.out = outFileName
-#         self.callback = callback
-#         updateMergeProgress()
-#         self.start()
-#
-#     def run(self):
-#         mergeHKLFile(self.ins, self.hkl, self.out, self.callback)
-
-
-# def mergeCallback(msg):
-#     global mergeProgress
-#     mergeProgress = msg
-#     # root.after(10, updateMergeProgress)
-#
-#
-# def updateMergeProgress():
-#     status['text'] = mergeProgress
-#     if mergeProgress == 'Data merged successfully.':
-#         _load()
-#     else:
-#         root.after(100, updateMergeProgress)
-
-
 def load():
     global IDLE
     if not IDLE:
         return
     IDLE = False
-    # global mergeCheck
-    # if mergeCheck.get():
-    #     # mergeHKLFile(insFile.get(),hklFile.get(),'_merged.hkl',)
-    #     # m = Merger(insFile.get(),hklFile.get(),'_merged.hkl', mergeCallback)
-    #     # hklFile.set('_merged.hkl')
-    #     return
-    # else:
     _load()
 
 
@@ -199,7 +157,10 @@ def _load():
 
 
 def browseINS():
-    from tkFileDialog import askopenfilename
+    try:
+        from tkFileDialog import askopenfilename
+    except ImportError:
+        from tkinter.filedialog import askopenfilename
     insFile.set(askopenfilename())
     hklGuess = path.splitext(insFile.get())[0]+'.hkl'
     if path.isfile(hklGuess) and not hklFile.get():
@@ -207,7 +168,10 @@ def browseINS():
 
 
 def browseHKL():
-    from tkFileDialog import askopenfilename
+    try:
+        from tkFileDialog import askopenfilename
+    except ImportError:
+        from tkinter.filedialog import askopenfilename
     hklFile.set(askopenfilename())
     resGuess = path.splitext(hklFile.get())[0]+'.res'
     if insFile.get():
@@ -238,12 +202,11 @@ def run():
 
 def _run():
     k = nFree.get()
-    # generateReflectionFiles(hklFile.get(), k)
-    # status['text'] = 'Working... HKL files generated.'
 
     global insContent
     foundList = False
     foundMerge = False
+    foundWigl = False
     for i, line in enumerate(insContent):
         if line[:4].upper() == 'L.S.' or line[:4].upper() == 'CGLS':
             insContent[i] = '{} {} -1\n'.format('L.S.' if lsType.get() == 2 else 'CGLS',
@@ -262,6 +225,10 @@ def _run():
             insContent[i] = 'MERG 4\n'
             foundMerge = True
 
+        if line[:4].upper() == 'WIGL':
+            # insContent[i] = 'MERG 4\n'
+            foundWigl = True
+
     if not foundList and compileMap.get():
         for i, line in enumerate(insContent):
             if line[:4].upper() == 'L.S.' or line[:4].upper() == 'CGLS':
@@ -272,6 +239,12 @@ def _run():
         for i, line in enumerate(insContent):
             if line[:4].upper() == 'L.S.' or line[:4].upper() == 'CGLS':
                 insContent = insContent[:i+1] + ['MERG 4\n'] + insContent[i+1:]
+                break
+
+    if not foundWigl and wigl.get():
+        for i, line in enumerate(insContent):
+            if line[:4].upper() == 'L.S.' or line[:4].upper() == 'CGLS':
+                insContent = insContent[:i+1] + ['WIGL\n'] + insContent[i+1:]
                 break
 
     insContent = ''.join(insContent)
@@ -285,10 +258,10 @@ def _run():
     msgQueue = Queue.Queue(1)
     msgQueue.put(0)
     setStatus('test')
-    for n in xrange(nFiles):
+    for n in range(nFiles):
         n += 1
         queue.put(('.k_set{:0>4}.hkl'.format(str(n)),n))
-    for i in xrange(nCPU.get()):
+    for i in range(nCPU.get()):
         t = WorkerThread(i, queue, msgQueue, insContent, hklFile.get(), nHKL.get() / nFree.get())
         threads.append(t)
         t.start()
@@ -382,7 +355,6 @@ class WorkerThread(threading.Thread):
                  stdout=FNULL)
         except AttributeError:
             call(['shelxl', '-t1', '-g{}'.format(self.numberOfRuns), '-m{}'.format(m), name], stdout=FNULL)
-        # call(['shelxl', '-t1', name])
         with open(name+'.lst', 'r') as lstFile:
             for line in lstFile.readlines():
                 if 'Nfree(all)' in line:
@@ -398,14 +370,13 @@ class WorkerThread(threading.Thread):
         else:
             i = self.msgQueue.get() + 1
             self.msgQueue.put(i)
-            # print self.ID, i
         msgLock.release()
 
 
 def percentScale(event):
     nFree.set(int(nHKL.get()*float(fracFree.get())/100.))
     try:
-        nRunsLabel['text'] = '{} runs'.format(nHKL.get() / nFree.get())
+        nRunsLabel['text'] = '{} runs'.format(int(nHKL.get() / nFree.get()))
     except ZeroDivisionError:
         nRunsLabel['text'] = '# runs'
 
@@ -424,7 +395,6 @@ def setScale(event):
 
 
 def compileSF():
-    from makeMap import makeMap
     makeMap('.k_')
 
 
@@ -433,14 +403,17 @@ def setStatus(msg):
 
 
 def gui():
-    from Tkinter import Tk, Label, Entry,Button, Scale, Checkbutton,W,HORIZONTAL, Frame, StringVar, IntVar, DoubleVar, Radiobutton, BooleanVar, E
+    try:
+        from Tkinter import Tk, Label, Entry,Button, Scale, Checkbutton,W,HORIZONTAL, Frame, StringVar, IntVar, DoubleVar, Radiobutton, BooleanVar, E
+    except ImportError:
+        from tkinter import Tk, Label, Entry,Button, Scale, Checkbutton,W,HORIZONTAL, Frame, StringVar, IntVar, DoubleVar, Radiobutton, BooleanVar, E
 
     global root
     root = Tk()
     root.wm_title("Compute R_complete")
     line = 0
 
-    global insFile, hklFile, nHKL, nParams, nHKLLabel, fracFree, status, nParamsLabel, nCPU, rCompleteLabel, cycles, lsType, cleanup,nFree, nRunsLabel, mergeCheck, compileMap
+    global insFile, hklFile, nHKL, nParams, nHKLLabel, fracFree, status, nParamsLabel, nCPU, rCompleteLabel, cycles, lsType, cleanup,nFree, nRunsLabel, mergeCheck, compileMap, wigl
     insFile = StringVar()
     hklFile = StringVar()
     nHKL = IntVar()
@@ -460,6 +433,8 @@ def gui():
     mergeCheck.set(True)
     compileMap = BooleanVar()
     compileMap.set(True)
+    wigl = BooleanVar()
+    wigl.set(False)
 
     Label(root, text='Instruction File:').grid(row=line, column=0, sticky=E)
     Entry(root, textvariable=insFile).grid(row=line, column=1)
@@ -471,8 +446,6 @@ def gui():
     Entry(root, textvariable=hklFile).grid(row=line, column=1)
     Button(root, text='Browse', command=browseHKL).grid(row=line, column=2)
 
-    # line += 1
-    # Checkbutton(root, var=mergeCheck, text='Merge Reflections').grid(row=line, column=1, sticky=W)
     line += 1
     Button(root, text='Load', command=load).grid(row=line, columnspan=3)
     line += 1
@@ -555,8 +528,12 @@ def gui():
 
     line += 1
     Frame(root, height=10).grid(row=line)
-    line += 1
 
+    # line += 1
+    # Label(root, text='Wigle:').grid(row=line, column=0, sticky=E)
+    # Checkbutton(root, var=wigl).grid(row=line, column=1, sticky=W)
+
+    line += 1
     Label(root, text='Compile map:').grid(row=line, column=0, sticky=E)
     Checkbutton(root, var=compileMap).grid(row=line, column=1, sticky=W)
 
@@ -589,6 +566,52 @@ def gui():
     IDLE = True
 
     root.mainloop()
+
+from os import listdir
+from os.path import join
+
+def makeMap(fileNameBase, dir='./', output='Rcomplete.fcf'):
+    fcfFiles = [fcfFile for fcfFile in listdir(join(dir))
+                if fcfFile.endswith('.fcf') and fcfFile.startswith(fileNameBase)]
+    data = []
+    first = True
+    for fcfFile in fcfFiles:
+        hklFile = fcfFile[:-3] + 'hkl'
+        flaggedIndices = []
+        with open(hklFile, 'r') as hkl:
+            for line in hkl.readlines():
+                if line[-3:-1] == '-1':
+                    flaggedIndices.append(tuple([int(i) for i in line[0:14].split()]))
+        with open(fcfFile, 'r') as fcf:
+            read = False
+            for line in fcf.readlines():
+                if read:
+                    line = line.rstrip(' \n')
+                    if not line:
+                        break
+                    line = line.strip().split()
+                    fCalc = '{:7.2f}'.format(float(line[5])**.5).strip()
+                    line[5] = fCalc
+                    line = ' ' + ' '.join(line[:-2])
+                    data.append(line)
+                elif first:
+                    if '_refln_F_squared_calc' in line:
+                        data.append(' _refln_F_calc')
+                    elif '_refln_d_spacing' in line:
+                        continue
+                    elif '_shelx_refinement_sigma' in line:
+                        pass
+                    elif '_shelx_refln_list_code' in line:
+                        data.append('_shelx_refln_list_code          6')
+                    else:
+                        data.append(line[:-1])
+                if '_shelx_refinement_sigma' in line:
+                    read = True
+        first = False
+    with open(output, 'w') as outFile:
+        outFile.write('\n'.join(data)+'\n')
+
+
 
 
 if __name__ == '__main__':
