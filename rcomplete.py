@@ -566,7 +566,10 @@ def gui():
     status.grid(row=line, column=1, columnspan=2, sticky=W)
     global IDLE
     IDLE = True
-
+    
+    root.lift()
+    root.attributes('-topmost',True)
+    root.after_idle(root.attributes,'-topmost',False)
     root.mainloop()
 
 from os import listdir
