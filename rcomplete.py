@@ -309,15 +309,16 @@ def noGUI():
     globals()['root'] = MockType()
     globals()['cleanup'] = MockType(True)
     globals()['rCompleteLabel'] = MockType(silent=False, prefix='R_complete:\n')
-    _run()
-    for thread in threads:
-        thread.join()
-    finish()
+    try:
+        _run()
+        for thread in threads:
+            thread.join()
+        finish()
+    except:
+        print('xxxxx')
+        clean()
+
     return rCompleteLabel.get()
-
-
-
-
 
 
 def run():
@@ -442,12 +443,15 @@ def finish():
     if compileMap.get():
         compileSF()
     if cleanup.get():
-        from os import listdir, remove
-        for file in listdir('./'):
-            if file.startswith('.k_set'):
-                remove(file)
+        clean()
     global IDLE
     IDLE = True
+
+def clean():
+    from os import listdir, remove
+    for file in listdir('./'):
+        if file.startswith('.k_set'):
+            remove(file)
 
 
 class WorkerThread(threading.Thread):
@@ -710,6 +714,7 @@ def gui():
 from os import listdir
 from os.path import join
 
+
 def makeMap(fileNameBase, dir='./', output='Rcomplete.fcf'):
     fcfFiles = [fcfFile for fcfFile in listdir(join(dir))
                 if fcfFile.endswith('.fcf') and fcfFile.startswith(fileNameBase)]
@@ -758,5 +763,6 @@ if __name__ == '__main__':
     from sys import argv
     if '-x' in argv:
         noGUI()
+
     else:
         gui()
