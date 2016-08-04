@@ -184,6 +184,142 @@ def browseHKL():
         insFile.set(insGuess)
 
 
+class MockType(dict):
+    def __init__(self, value=False, silent=True, prefix=''):
+        self.value = value
+        self.silent = silent
+        self.prefix = prefix
+    def get(self):
+        return self.value
+    def set(self, value):
+        self.value = value
+    def __call__(self, *args, **kwargs):
+        pass
+    def after(self, *args):
+        pass
+    def __getitem__(self, item):
+        return self.value
+    def __setitem__(self, key, value):
+        self.value = value
+        if not self.silent:
+            print('{}{}'.format(self.prefix, value))
+
+def showHead():
+    print('''
+#################################################
+#                   R_complete                  #
+#    A tool to compute R_complete with SHELXL   #
+#                                               #
+# Please cite:                                  #
+# J Luebben, T Gruene, PNAS 112 (29), 8999-9003 #
+#################################################
+
+    USAGE: R_complete [options] filename
+
+Call program without file name or with '--help'
+for additional information.
+''')
+
+def showHelp():
+    print('''
+OPTIONS:
+    n[50]:    Number of free reflections in each run.
+    i[20]:    Number of refinement cycles.
+    l[CGLS]:  Optimization method. CGLS or L.S.
+    u[all]:   Number of CPUs used.
+    h[*.hkl]: Name of reflection file.
+    f:        Compile an unbiased .fcf file.
+    w:        WIGL parameters before refining.
+
+The sequence of options and filename on the
+command line are irrelevant.
+''')
+
+def setOptions(options, key):
+    options[key] = True
+    return False
+
+
+def noGUI():
+    showHead()
+    options = {'n': 50,
+               'l': 'CGLS',
+               'i': 20,
+               'u': maxCPU,
+               'f': False,
+               'w': False,
+               'h': None,
+               'file': '',
+               'x': False}
+    refSet = set(options.keys())
+    from sys import argv
+    if '--help' in argv:
+        showHelp()
+        return
+    argv = [(arg, True if arg.startswith('-') and all([i in options for i in arg[1:]]) else False) for arg in argv[1:]]
+    argv = [(arg, True if n and options[arg.lstrip('-')] else setOptions(options, arg.lstrip('-'))) for arg, n in argv]
+    # print(argv)
+    cmd = None
+    for arg, n in argv:
+        opt = arg.startswith('-')
+        arg = arg.lstrip('-')
+        if n:
+            cmd = arg
+            continue
+        elif cmd:
+            options[cmd] = arg
+            cmd = None
+        elif opt:
+            value = arg[1:]
+            options[arg[0]] = value if value else True
+        else:
+            if not options['file']:
+                options['file'] = arg
+            else:
+                print('Warning: Unknown additional argument:', arg)
+    diff = set(options.keys()).difference(refSet)
+    if len(diff)>1:
+        print('Error: Unknown option:', diff)
+    if not options['file'] or not options['l'] in ('CGLS', 'L.S.'):
+        print('Error: Could not parse options.')
+        showHelp()
+        return
+    insContent = open(options['file'], 'r').readlines()
+    globals()['insFile'] = MockType(options['file'])
+    globals()['insContent'] = insContent
+    globals()['nFree'] = MockType(options['n'])
+    globals()['lsType'] = MockType(options['l'])
+    globals()['cycles'] = MockType(options['i'])
+    globals()['compileMap'] = MockType(options['f'])
+    globals()['wigl'] = MockType(options['w'])
+    globals()['nHKL'] = MockType()
+    globals()['nCPU'] = MockType(options['u'])
+    globals()['nHKLLabel'] = MockType()
+    globals()['nParams'] = MockType()
+    globals()['nParamsLabel'] = MockType()
+    globals()['fracFree'] = MockType()
+    globals()['status'] = MockType()
+    globals()['percentScale'] = MockType()
+    if options['h']:
+        globals()['hklFile'] = MockType(options['h'])
+    else:
+        globals()['hklFile'] = MockType(options['file'][:-3]+'hkl')
+    _load()
+    globals()['nFree'] = MockType(options['n'])
+    globals()['root'] = MockType()
+    globals()['cleanup'] = MockType(True)
+    globals()['rCompleteLabel'] = MockType(silent=False, prefix='R_complete:\n')
+    _run()
+    for thread in threads:
+        thread.join()
+    finish()
+    return rCompleteLabel.get()
+
+
+
+
+
+
 def run():
     global IDLE
     if not IDLE:
@@ -201,12 +337,11 @@ def run():
 
 
 def _run():
-    k = nFree.get()
-
     global insContent
-    foundList = False
+    k = nFree.get()
     foundMerge = False
     foundWigl = False
+    foundList = False
     for i, line in enumerate(insContent):
         if line[:4].upper() == 'L.S.' or line[:4].upper() == 'CGLS':
             insContent[i] = '{} {} -1\n'.format('L.S.' if lsType.get() == 2 else 'CGLS',
@@ -617,4 +752,8 @@ def makeMap(fileNameBase, dir='./', output='Rcomplete.fcf'):
 
 
 if __name__ == '__main__':
-    gui()
+    from sys import argv
+    if '-x' in argv:
+        noGUI()
+    else:
+        gui()
